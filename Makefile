@@ -1,8 +1,10 @@
-.PHONY: bootstrap platform check apply storage storage-init apps backup syntax
+.PHONY: bootstrap platform preflight check apply storage storage-init apps backup syntax
 bootstrap:
 	ansible-playbook playbooks/bootstrap.yml
 platform:
 	ansible-playbook playbooks/platform.yml
+preflight:
+	ansible-playbook playbooks/preflight.yml
 check:
 	ansible-playbook playbooks/site.yml --check --diff
 apply:

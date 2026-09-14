@@ -1,7 +1,7 @@
 *.retry
 .vault-password
 inventory/host_vars/
-inventory/group_vars/vault.yml
+inventory/group_vars/all/vault.yml
 .env
 
 # local planning docs (not tracked)

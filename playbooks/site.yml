@@ -1,4 +1,6 @@
 ---
+- import_playbook: preflight.yml
+
 - name: Configure home NAS
   hosts: nas
   become: true

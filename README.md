@@ -6,10 +6,12 @@ Production-minded Ansible for an Ubuntu 26.04 family NAS. It manages the host, a
 
 1. Install Ubuntu and prove initial SSH access.
 2. Install Ansible collections: `ansible-galaxy collection install -r requirements.yml`.
-3. Replace every placeholder in `inventory/home.yml` and `inventory/group_vars/all.yml`.
-4. Copy `inventory/group_vars/vault.example.yml` to `inventory/group_vars/vault.yml`, replace placeholders, and immediately run `ansible-vault encrypt inventory/group_vars/vault.yml`.
+3. Replace every placeholder in `inventory/home.yml` and `inventory/group_vars/all/all.yml`.
+4. Copy `inventory/vault.example.yml` to `inventory/group_vars/all/vault.yml`, replace every placeholder, and immediately run `ansible-vault encrypt inventory/group_vars/all/vault.yml`. The destination matters: a `group_vars/<name>` file is only loaded when a group named `<name>` exists, and this inventory has no `vault` group, so any other path is imported as nothing at all.
 5. Point the inventory at the temporary installer-created administrator and run `make bootstrap`. Then switch `ansible_user` to the new automation user. In a second terminal prove its public-key login and passwordless sudo; only then set both SSH hardening flags.
 6. Leave `firewall_enabled: false` until the real trusted LAN CIDR is configured and SSH access from that CIDR is proven. Then run `make check` and `make apply`.
+
+`make preflight` validates that no placeholder or empty value survives in the configuration required by the features you have enabled (`site.yml` runs it automatically before any role). Optional features left off are not checked, so they stay valid while unconfigured.
 
 Normal `site.yml` never creates a pool: it only imports an existing named pool and manages datasets. For first-time storage, collect and review `lsblk -O`, SMART output, serials and `/dev/disk/by-id` links. Configure exactly two whole-disk by-id paths and set the exact `zfs_storage_confirmation` string only after reviewing those facts, then invoke `make storage-init`. This is destructive and uses `zpool create -f`; never run it against a pool or disks containing data. `make storage` is only for importing/configuring a pool that already exists.
 

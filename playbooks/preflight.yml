@@ -1,0 +1,37 @@
+---
+# Fail before any role runs when the effective configuration still contains
+# placeholder or empty values. Checks are scoped to features that are enabled,
+# so an unconfigured optional feature stays valid.
+#
+# This runs on the controller only: assert needs no remote connection, so a
+# broken or unreachable host still gets a configuration verdict first.
+- name: Preflight configuration checks
+  hosts: nas
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Reject placeholder values required by enabled features
+      ansible.builtin.assert:
+        that:
+          - not (manage_netplan | bool) or nas_primary_interface not in ['', 'REPLACE_ME']
+          - not (enable_backup | bool) or restic_repository not in ['', 'REPLACE_ME']
+          - not (enable_backup | bool) or vault_restic_password | default('') not in ['', 'REPLACE_ME']
+          - not (enable_tailscale | bool) or vault_tailscale_authkey | default('') not in ['', 'REPLACE_ME']
+          - not (enable_immich | bool) or immich_db_password | default('') not in ['', 'REPLACE_ME']
+        fail_msg: >-
+          The inventory still contains placeholder values. Fill them in for every
+          enabled feature (see README "Safe start") or turn the feature off.
+
+    - name: Require a configured Samba password for every household user
+      ansible.builtin.assert:
+        that:
+          - >-
+            nas_users | map(attribute='name') | difference(
+              samba_passwords | default({}) | dict2items
+              | rejectattr('value', 'in', ['', 'REPLACE_ME'])
+              | map(attribute='key') | list
+            ) | list | length == 0
+        fail_msg: >-
+          Every user in nas_users needs a Samba password in samba_passwords that
+          is neither empty nor a placeholder.
