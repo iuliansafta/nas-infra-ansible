@@ -1,10 +1,12 @@
-.PHONY: bootstrap platform preflight check apply storage storage-init apps backup seal syntax
+.PHONY: bootstrap platform preflight verify check apply storage storage-init apps backup seal syntax
 bootstrap:
 	ansible-playbook playbooks/bootstrap.yml
 platform:
 	ansible-playbook playbooks/platform.yml
 preflight:
 	ansible-playbook playbooks/preflight.yml
+verify:
+	ansible-playbook playbooks/verify.yml
 check:
 	ansible-playbook playbooks/site.yml --check --diff
 apply:

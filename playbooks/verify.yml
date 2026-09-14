@@ -1,0 +1,201 @@
+---
+# Verify that the sealed secrets actually work against the live host: each
+# secret is exercised against the service that consumes it, rather than merely
+# checked for being present (preflight covers presence).
+#
+#   make verify
+#
+# Read-only with respect to the NAS: nothing on the host is modified, and no
+# credentials file is written anywhere - smbclient takes the password from the
+# PASSWD environment variable, so it never reaches argv.
+#
+# Exits non-zero when any check fails. A check that cannot run is reported as
+# SKIP, never as a pass, so a missing tool cannot look like a healthy secret.
+- import_playbook: preflight.yml
+
+- name: Verify sealed secrets against the live host
+  hosts: nas
+  become: true
+  gather_facts: false
+
+  vars:
+    # smbclient cannot resolve the inventory name: it exists only in the
+    # controller's ~/.ssh/config, which is why SSH works and SMB does not.
+    # Override with -e verify_smb_host=... when running from off-LAN.
+    verify_smb_host: "{{ nas_lan_ip.stdout | default('') | trim }}"
+    verify_smb_user: "{{ nas_users[0].name }}"
+
+  tasks:
+    - name: Start with an empty result set
+      ansible.builtin.set_fact:
+        verify_results: []
+
+    - name: Discover the address to reach SMB on
+      ansible.builtin.shell: ip -4 route get 1.1.1.1 | awk '{print $7; exit}'
+      register: nas_lan_ip
+      changed_when: false
+      failed_when: false
+
+    # ---------- Immich database ----------
+    - name: Read the deployed Immich environment file
+      ansible.builtin.slurp:
+        src: "{{ immich_compose_path }}/.env"
+      register: verify_immich_env
+      failed_when: false
+      no_log: true
+
+    - name: Record whether the deployed Immich password matches the vault
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'deployed immich .env password matches the vault',
+               'status': 'pass' if ('DB_PASSWORD=' ~ immich_db_password) in (verify_immich_env.content | default('') | b64decode) else 'FAIL',
+               'detail': 'cannot read ' ~ immich_compose_path ~ '/.env' if verify_immich_env.content is not defined else '' }] }}
+      no_log: true
+
+    # The password travels over stdin, so it never appears in the process table.
+    - name: Authenticate to PostgreSQL with the vaulted Immich password
+      ansible.builtin.shell: |
+        printf '%s' {{ immich_db_password | quote }} | \
+          docker exec -i immich_postgres bash -c '
+            read -r PGPASSWORD; export PGPASSWORD
+            echo "select count(*) from \"user\"" | psql -U postgres -d immich -tA'
+      register: verify_pg
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Record the PostgreSQL result
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'immich_db_password authenticates to immich_postgres',
+               'status': 'pass' if verify_pg.rc == 0 else 'FAIL',
+               'detail': (verify_pg.stderr | default('') | trim | replace(immich_db_password, '<redacted>')) if verify_pg.rc != 0 else '' }] }}
+      no_log: true
+
+    - name: Check Immich answers over HTTP
+      ansible.builtin.shell: |
+        curl -s -o /dev/null -w '%{http_code}' http://{{ immich_bind_address }}:{{ immich_port }}/api/server/ping
+      register: verify_http
+      changed_when: false
+      failed_when: false
+
+    - name: Record the Immich HTTP result
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'immich responds on ' ~ immich_bind_address ~ ':' ~ immich_port,
+               'status': 'pass' if (verify_http.stdout | trim) == '200' else 'FAIL',
+               'detail': 'HTTP ' ~ (verify_http.stdout | default('none') | trim) }] }}
+
+    # ---------- Samba, over the real network path ----------
+    - name: Is smbclient available on the controller?
+      ansible.builtin.command: which smbclient
+      register: verify_smbclient
+      delegate_to: localhost
+      connection: local
+      become: false
+      changed_when: false
+      failed_when: false
+
+    - name: Can the SMB check run at all?
+      ansible.builtin.set_fact:
+        verify_smb_runnable: >-
+          {{ (verify_smbclient.rc | default(1)) == 0 and (verify_smb_host | length) > 0 }}
+        verify_smb_reason: >-
+          {{ 'smbclient is not installed on the controller' if (verify_smbclient.rc | default(1)) != 0
+             else ('no address discovered for ' ~ inventory_hostname) if (verify_smb_host | length) == 0
+             else '' }}
+
+    - name: Authenticate to Samba with the vaulted password
+      ansible.builtin.command: smbclient -L {{ verify_smb_host }} -U {{ verify_smb_user }}
+      environment:
+        PASSWD: "{{ samba_passwords[verify_smb_user] }}"
+      register: verify_smb
+      delegate_to: localhost
+      connection: local
+      become: false
+      changed_when: false
+      failed_when: false
+      no_log: true
+      when: verify_smb_runnable | bool
+
+    - name: Record the Samba result
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'samba_passwords authenticate as ' ~ verify_smb_user ~ ' to ' ~ (verify_smb_host | default('?')) ,
+               'status': 'SKIP' if not (verify_smb_runnable | bool)
+                         else ('pass' if (verify_smb.rc | default(1)) == 0 else 'FAIL'),
+               'detail': verify_smb_reason if not (verify_smb_runnable | bool)
+                         else (verify_smb.stderr | default('') | trim | replace(samba_passwords[verify_smb_user], '<redacted>')) if (verify_smb.rc | default(1)) != 0
+                         else '' }] }}
+      no_log: true
+
+    # ---------- restic, only meaningful when backups are enabled ----------
+    - name: Read the protected backup environment
+      ansible.builtin.slurp:
+        src: /etc/nas-backup.env
+      register: verify_backup_env
+      failed_when: false
+      no_log: true
+      when: enable_backup | bool
+
+    - name: Confirm the host's stored restic password matches the vault
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'stored restic password matches the vault',
+               'status': 'pass' if ('RESTIC_PASSWORD=' ~ restic_password) in (verify_backup_env.content | default('') | b64decode) else 'FAIL',
+               'detail': '/etc/nas-backup.env is missing' if verify_backup_env.content is not defined else '' }] }}
+      no_log: true
+      when: enable_backup | bool
+
+    - name: Open the restic repository with the vaulted password
+      ansible.builtin.shell: |
+        set -a; . /etc/nas-backup.env; set +a
+        restic snapshots --no-lock >/dev/null
+      register: verify_restic
+      changed_when: false
+      failed_when: false
+      no_log: true
+      when: enable_backup | bool
+
+    - name: Record the restic result
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'restic_password opens the repository',
+               'status': 'pass' if verify_restic.rc == 0 else 'FAIL',
+               'detail': (verify_restic.stderr | default('') | trim | replace(restic_password, '<redacted>')) if verify_restic.rc != 0 else '' }] }}
+      no_log: true
+      when: enable_backup | bool
+
+    - name: Record that the restic password is not exercised
+      ansible.builtin.set_fact:
+        verify_results: >-
+          {{ verify_results + [{
+               'check': 'restic_password opens the repository',
+               'status': 'SKIP',
+               'detail': 'enable_backup is false' }] }}
+      when: not (enable_backup | bool)
+
+    # ---------- Report ----------
+    - name: Summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ verify_results | map(attribute='check') | zip(verify_results | map(attribute='status'))
+             | map('join', ' ... ') | list }}
+
+    - name: Detail for checks that did not pass
+      ansible.builtin.debug:
+        msg: "{{ verify_results | selectattr('status', 'ne', 'pass') | list }}"
+      when: verify_results | selectattr('status', 'ne', 'pass') | list | length > 0
+
+    - name: Fail when any check failed
+      ansible.builtin.assert:
+        that:
+          - verify_results | selectattr('status', 'equalto', 'FAIL') | list | length == 0
+        fail_msg: "Sealed secrets did not verify - see the failing checks above."
+        success_msg: "All exercised secrets work against the live host."
