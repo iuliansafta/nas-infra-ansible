@@ -1,6 +1,6 @@
 # NAS infrastructure
 
-Production-minded Ansible for the Ubuntu 26.04 family NAS described in [PLAN.md](PLAN.md). It manages the host, an existing ZFS pool, Samba, Docker/Immich, Home Assistant, Tailscale, snapshots, SMART and optional backups/Scrutiny. It does **not** initialize Git or contain secrets.
+Production-minded Ansible for an Ubuntu 26.04 family NAS. It manages the host, an existing ZFS pool, Samba, Docker/Immich, Home Assistant, Tailscale, snapshots, SMART and optional backups/Scrutiny. It does **not** manage Git on the target host or contain secrets.
 
 ## Safe start
 
@@ -19,4 +19,8 @@ Home Assistant keeps `network_mode: host` for mDNS discovery, but its HTTP liste
 
 Before enabling backups, mount the removable filesystem at `backup_mount`, configure and encrypt the vault, and initialize the restic repository once with `set -a; . /etc/nas-backup.env; set +a; restic init`. Automated jobs deliberately refuse to initialize a repository, so authentication or connectivity failures cannot be mistaken for a new repository.
 
-See [recovery](docs/RECOVERY.md), [migration](docs/MIGRATION.md), and [acceptance checks](docs/ACCEPTANCE.md). Read Immich release notes before changing `immich_version`; create a DB backup first and validate login, upload and asset access afterward. Home Assistant upgrades migrate the recorder database irreversibly: take the config archive first, then change only `homeassistant_version` and validate login and automations.
+See [recovery](docs/RECOVERY.md) and [acceptance checks](docs/ACCEPTANCE.md). Read Immich release notes before changing `immich_version`; create a DB backup first and validate login, upload and asset access afterward. Home Assistant upgrades migrate the recorder database irreversibly: take the config archive first, then change only `homeassistant_version` and validate login and automations.
+
+## Local-only documents
+
+`PLAN.md`, `plan_ubuntu_26_04.md` and `docs/MIGRATION.md` are design and migration planning kept on the author's machine only. They are gitignored and deliberately absent from this repository, so the links above are the tracked documentation set.
