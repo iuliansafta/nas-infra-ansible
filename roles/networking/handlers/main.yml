@@ -1,0 +1,5 @@
+---
+- name: Validate netplan
+  ansible.builtin.command: netplan generate
+  changed_when: false
+# Applying remote network changes is deliberately manual: use `netplan try` at the console.

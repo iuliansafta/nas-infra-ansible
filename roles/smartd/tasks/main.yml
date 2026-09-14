@@ -1,0 +1,11 @@
+---
+- name: Install SMART monitoring
+  ansible.builtin.apt:
+    name: smartmontools
+    state: present
+- name: Configure SMART monitoring and non-overlapping tests
+  ansible.builtin.copy:
+    dest: /etc/smartd.conf
+    mode: '0644'
+    content: "DEVICESCAN -a -o on -S on -n standby,q -s (S/../../7/02|L/../15/./03)\n"
+  notify: Restart smartd

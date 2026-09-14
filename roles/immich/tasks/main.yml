@@ -1,0 +1,48 @@
+---
+- name: Require a safe non-placeholder Immich database secret
+  ansible.builtin.assert:
+    that:
+      - immich_db_password is defined
+      - immich_db_password | default('REPLACE_ME') != 'REPLACE_ME'
+      - immich_db_password | default('') is match('^[A-Za-z0-9]+$')
+      - immich_db_password | default('') | length >= 24
+    fail_msg: The vaulted Immich DB password must contain at least 24 alphanumeric characters.
+- name: Validate pinned Immich release
+  ansible.builtin.assert:
+    that: immich_version is match('^v[0-9]+\.[0-9]+\.[0-9]+$')
+    fail_msg: Pin immich_version to an exact release tag such as v3.2.0.
+- name: Check Intel DRM device when hardware acceleration is enabled
+  ansible.builtin.stat:
+    path: /dev/dri/renderD128
+  register: immich_render_device
+  when: immich_enable_dri | bool
+- name: Require Intel DRM render device when hardware acceleration is enabled
+  ansible.builtin.assert:
+    that: immich_render_device.stat.exists
+    fail_msg: Disable immich_enable_dri or make /dev/dri/renderD128 available before deployment.
+  when: immich_enable_dri | bool
+- name: Create Immich directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+  loop: ["{{ immich_compose_path }}", "{{ immich_appdata_path }}/postgres", "{{ immich_data_path }}"]
+- name: Render Immich environment
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ immich_compose_path }}/.env"
+    mode: '0600'
+  no_log: true
+  notify: Deploy immich
+- name: Render pinned Immich Compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ immich_compose_path }}/compose.yml"
+    mode: '0640'
+  notify: Deploy immich
+- name: Validate rendered Immich Compose project
+  ansible.builtin.command: docker compose config --quiet
+  args:
+    chdir: "{{ immich_compose_path }}"
+  changed_when: false
+  when: not ansible_check_mode

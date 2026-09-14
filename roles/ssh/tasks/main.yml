@@ -1,0 +1,46 @@
+---
+- name: Create automation administrator
+  ansible.builtin.user:
+    name: "{{ ansible_admin_user }}"
+    groups: sudo
+    append: true
+    shell: /bin/bash
+    create_home: true
+- name: Require at least one configured automation SSH key
+  ansible.builtin.assert:
+    that:
+      - ansible_admin_authorized_keys | length > 0
+      - ansible_admin_authorized_keys | reject('match', '^(ssh-(rsa|ed25519)|ecdsa-)') | list | length == 0
+    fail_msg: Replace the example value with at least one complete SSH public key before bootstrap.
+- name: Install automation SSH keys
+  ansible.posix.authorized_key:
+    user: "{{ ansible_admin_user }}"
+    key: "{{ item }}"
+  loop: "{{ ansible_admin_authorized_keys }}"
+- name: Permit the automation administrator to use passwordless sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ ansible_admin_user }}"
+    content: "{{ ansible_admin_user }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
+- name: Require proof before SSH hardening
+  ansible.builtin.assert:
+    that: ssh_bootstrap_proven | bool
+    fail_msg: Set ssh_bootstrap_proven only after testing key login and sudo in a second session.
+  when: ssh_hardening_enabled | bool
+- name: Install hardened SSH drop-in
+  ansible.builtin.template:
+    src: hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/90-nas-hardening.conf
+    mode: '0644'
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload ssh
+  when: ssh_hardening_enabled | bool
+- name: Remove SSH hardening drop-in when explicitly disabled
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/90-nas-hardening.conf
+    state: absent
+  notify: Reload ssh
+  when: not (ssh_hardening_enabled | bool)

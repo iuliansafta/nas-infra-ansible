@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily NAS backup
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+[Install]
+WantedBy=timers.target

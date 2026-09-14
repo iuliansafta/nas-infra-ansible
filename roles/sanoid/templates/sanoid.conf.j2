@@ -1,0 +1,18 @@
+[{{ zfs_pool_name }}/documents]
+	use_template = documents
+	recursive = yes
+[{{ zfs_pool_name }}/photos]
+	use_template = photos
+	recursive = yes
+[template_documents]
+	hourly = 24
+	daily = 30
+	monthly = 12
+	autosnap = yes
+	autoprune = yes
+[template_photos]
+	hourly = 0
+	daily = 30
+	monthly = 12
+	autosnap = yes
+	autoprune = yes

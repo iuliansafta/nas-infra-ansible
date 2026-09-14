@@ -1,0 +1,6 @@
+---
+- name: Safely initialize or configure ZFS storage
+  hosts: nas
+  become: true
+  roles:
+    - zfs

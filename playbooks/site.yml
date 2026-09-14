@@ -1,0 +1,20 @@
+---
+- name: Configure home NAS
+  hosts: nas
+  become: true
+  roles:
+    - base
+    - ssh
+    - firewall
+    - networking
+    - zfs
+    - users
+    - samba
+    - docker
+    - { role: immich, when: enable_immich | bool }
+    - { role: homeassistant, when: enable_homeassistant | bool }
+    - { role: tailscale, when: enable_tailscale | bool }
+    - sanoid
+    - smartd
+    - { role: scrutiny, when: enable_scrutiny | bool }
+    - { role: backup, when: enable_backup | bool }

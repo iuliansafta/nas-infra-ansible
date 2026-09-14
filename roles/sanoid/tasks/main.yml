@@ -1,0 +1,32 @@
+---
+- name: Install Sanoid
+  ansible.builtin.apt:
+    name: sanoid
+    state: present
+- name: Create Sanoid configuration directory
+  ansible.builtin.file:
+    path: /etc/sanoid
+    state: directory
+    mode: '0755'
+- name: Configure snapshot policy
+  ansible.builtin.template:
+    src: sanoid.conf.j2
+    dest: /etc/sanoid/sanoid.conf
+    mode: '0644'
+- name: Enable Sanoid timer
+  ansible.builtin.systemd_service:
+    name: sanoid.timer
+    enabled: true
+    state: started
+- name: Install monthly scrub timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  loop: [zfs-scrub@.service, zfs-scrub@.timer]
+  notify: Reload systemd
+- name: Enable monthly pool scrub
+  ansible.builtin.systemd_service:
+    name: "zfs-scrub@{{ zfs_pool_name }}.timer"
+    enabled: true
+    state: started

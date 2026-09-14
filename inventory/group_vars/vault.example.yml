@@ -1,0 +1,8 @@
+---
+# Copy to inventory/group_vars/vault.yml, replace every value, then run:
+# ansible-vault encrypt inventory/group_vars/vault.yml
+samba_passwords:
+  iuliansafta: REPLACE_ME
+immich_db_password: REPLACE_ME
+vault_restic_password: REPLACE_ME
+vault_tailscale_authkey: REPLACE_ME

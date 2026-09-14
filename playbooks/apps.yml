@@ -1,0 +1,9 @@
+---
+- name: Deploy NAS applications
+  hosts: nas
+  become: true
+  roles:
+    - docker
+    - { role: immich, when: enable_immich | bool }
+    - { role: homeassistant, when: enable_homeassistant | bool }
+    - { role: scrutiny, when: enable_scrutiny | bool }

@@ -1,0 +1,39 @@
+---
+- name: Validate household user and dataset declarations
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-z_][a-z0-9_-]*$')
+      - item.private_dataset == (zfs_pool_name ~ '/documents/' ~ item.name)
+    fail_msg: Each private dataset must be under the configured pool and match its safe Unix username.
+  loop: "{{ nas_users }}"
+- name: Create shared NAS group
+  ansible.builtin.group:
+    name: "{{ shared_group }}"
+- name: Create household users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    groups: "{{ shared_group }}"
+    append: true
+    shell: /usr/sbin/nologin
+  loop: "{{ nas_users }}"
+- name: Set private dataset ownership and mode
+  ansible.builtin.file:
+    path: "/{{ item.private_dataset }}"
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: '0700'
+  loop: "{{ nas_users }}"
+- name: Set shared dataset ownership and inheritable ACL
+  ansible.builtin.file:
+    path: "/{{ shared_dataset }}"
+    owner: root
+    group: "{{ shared_group }}"
+    mode: '2770'
+- name: Set shared default ACL
+  ansible.posix.acl:
+    path: "/{{ shared_dataset }}"
+    entity: "{{ shared_group }}"
+    etype: group
+    permissions: rwx
+    default: true
+    state: present

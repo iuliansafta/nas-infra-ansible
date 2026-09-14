@@ -1,0 +1,8 @@
+---
+all:
+  children:
+    nas:
+      hosts:
+        nas-thonon:
+          ansible_user: ansible
+          ansible_become_exe: /usr/bin/sudo.ws

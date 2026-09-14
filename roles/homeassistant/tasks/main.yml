@@ -1,0 +1,71 @@
+---
+- name: Validate pinned Home Assistant release
+  ansible.builtin.assert:
+    that: homeassistant_version is match('^[0-9]{4}\.[0-9]+\.[0-9]+$')
+    fail_msg: Pin homeassistant_version to an exact release tag such as 2026.9.1.
+- name: Check configured radio devices
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ homeassistant_serial_devices }}"
+  register: homeassistant_device_stats
+- name: Require every configured radio device to exist
+  ansible.builtin.assert:
+    that: homeassistant_device_stats.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      A configured homeassistant_serial_devices path is missing. Use stable
+      /dev/serial/by-id/... paths and re-check after the stick is re-plugged.
+  when: homeassistant_serial_devices | length > 0
+- name: Create Home Assistant directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+  loop: ["{{ homeassistant_compose_path }}", "{{ homeassistant_config_path }}"]
+- name: Ensure the Home Assistant storage directory exists
+  ansible.builtin.file:
+    path: "{{ homeassistant_config_path }}/.storage"
+    state: directory
+    mode: '0755'
+- name: Read the deployed Home Assistant HTTP configuration
+  ansible.builtin.slurp:
+    src: "{{ homeassistant_config_path }}/.storage/http"
+  register: homeassistant_http_deployed
+  failed_when: false
+- name: Preserve the store timestamp so repeat runs stay byte-identical
+  ansible.builtin.set_fact:
+    homeassistant_http_created_at: >-
+      {{ ((homeassistant_http_deployed.content | default('') | b64decode
+           | default('{}', true) | from_json)
+          .get('data', {}).get('stable', {}).get('created_at'))
+         | default('', true) or ansible_facts['date_time']['iso8601'] }}
+# Written straight into the config store. YAML cannot be used for this: Home
+# Assistant stages an `http:` block from YAML as an unconfirmed trial that
+# auto-reverts after five minutes, and on a fresh install there is no logged-in
+# user to confirm it - so the loopback bind silently reverts to 0.0.0.0.
+# `pending` must stay present as null; Home Assistant's loader indexes that key
+# directly and the whole http component fails to set up without it.
+- name: Bind the HTTP listener to loopback and trust the Serve proxy
+  ansible.builtin.copy:
+    dest: "{{ homeassistant_config_path }}/.storage/http"
+    content: "{{ lookup('ansible.builtin.template', 'http-store.json.j2') }}"
+    mode: '0600'
+  notify: Restart homeassistant
+- name: Seed the initial Home Assistant configuration
+  ansible.builtin.template:
+    src: configuration.yaml.j2
+    dest: "{{ homeassistant_config_path }}/configuration.yaml"
+    mode: '0640'
+    force: false
+  notify: Deploy homeassistant
+- name: Render pinned Home Assistant Compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ homeassistant_compose_path }}/compose.yml"
+    mode: '0640'
+  notify: Deploy homeassistant
+- name: Validate rendered Home Assistant Compose project
+  ansible.builtin.command: docker compose config --quiet
+  args:
+    chdir: "{{ homeassistant_compose_path }}"
+  changed_when: false
+  when: not ansible_check_mode

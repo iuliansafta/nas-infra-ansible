@@ -1,0 +1,33 @@
+---
+- name: Create Scrutiny paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+  loop: [/srv/compose/scrutiny, /srv/appdata/scrutiny]
+- name: Install local-only Scrutiny compose file
+  ansible.builtin.copy:
+    dest: /srv/compose/scrutiny/compose.yml
+    mode: '0640'
+    content: |
+      services:
+        scrutiny:
+          image: ghcr.io/analogj/scrutiny:v0.8.1-omnibus
+          cap_add: [SYS_RAWIO]
+          devices:
+      {% for disk in zfs_mirror_disks %}
+            - {{ disk }}:{{ disk }}
+      {% endfor %}
+          volumes:
+            - /run/udev:/run/udev:ro
+            - /srv/appdata/scrutiny:/opt/scrutiny/config
+          ports:
+            - 127.0.0.1:8080:8080
+          restart: unless-stopped
+  notify: Deploy scrutiny
+- name: Validate rendered Scrutiny Compose project
+  ansible.builtin.command: docker compose config --quiet
+  args:
+    chdir: /srv/compose/scrutiny
+  changed_when: false
+  when: not ansible_check_mode

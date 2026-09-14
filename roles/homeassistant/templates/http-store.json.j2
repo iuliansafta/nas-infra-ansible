@@ -1,0 +1,23 @@
+{{ {
+  'version': 2,
+  'minor_version': 2,
+  'key': 'http',
+  'data': {
+    'stable': {
+      'server_port': homeassistant_port | int,
+      'server_host': [homeassistant_bind_address],
+      'use_x_forwarded_for': true,
+      'trusted_proxies': [homeassistant_bind_address ~ '/32'],
+      'cors_allowed_origins': ['https://cast.home-assistant.io'],
+      'login_attempts_threshold': -1,
+      'ip_ban_enabled': true,
+      'ssl_profile': 'modern',
+      'use_x_frame_options': true,
+      'created_at': homeassistant_http_created_at,
+      'error': none,
+      'error_message': none
+    },
+    'pending': none,
+    'yaml_migration_done': true
+  }
+} | to_nice_json }}

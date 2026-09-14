@@ -1,0 +1,7 @@
+---
+- name: Bootstrap NAS administration
+  hosts: nas
+  become: true
+  roles:
+    - base
+    - ssh

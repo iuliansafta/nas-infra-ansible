@@ -1,0 +1,15 @@
+---
+- name: Deploy homeassistant
+  ansible.builtin.command: docker compose up -d --remove-orphans
+  args:
+    chdir: "{{ homeassistant_compose_path }}"
+  changed_when: true
+  when: not ansible_check_mode
+# `docker compose up -d` does not restart a container whose Compose definition is
+# unchanged, so a rewritten config store needs an explicit restart to be read.
+- name: Restart homeassistant
+  ansible.builtin.command: docker compose restart
+  args:
+    chdir: "{{ homeassistant_compose_path }}"
+  changed_when: true
+  when: not ansible_check_mode

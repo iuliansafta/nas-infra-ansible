@@ -1,0 +1,56 @@
+---
+- name: Configure the host firewall when explicitly enabled
+  when: firewall_enabled | bool
+  block:
+    - name: Validate trusted LAN before enabling the firewall
+      ansible.builtin.assert:
+        that:
+          - nas_lan_cidr != '192.0.2.0/24'
+          - nas_lan_cidr is match('^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$')
+        fail_msg: Set nas_lan_cidr to the real trusted LAN before enabling UFW.
+    - name: Install UFW
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+    - name: Set default incoming policy
+      community.general.ufw:
+        direction: incoming
+        policy: deny
+    - name: Permit SSH and SMB from trusted LAN
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        from_ip: "{{ nas_lan_cidr }}"
+      loop:
+        - '22'
+        - '445'
+    - name: Permit Immich from trusted LAN
+      community.general.ufw:
+        rule: allow
+        port: "{{ immich_port }}"
+        proto: tcp
+        from_ip: "{{ nas_lan_cidr }}"
+      when: enable_immich | bool
+    - name: Permit SSH and SMB on the Tailscale interface
+      community.general.ufw:
+        rule: allow
+        interface_in: tailscale0
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '22'
+        - '445'
+      when: enable_tailscale | bool
+    - name: Permit Immich on the Tailscale interface
+      community.general.ufw:
+        rule: allow
+        interface_in: tailscale0
+        port: "{{ immich_port }}"
+        proto: tcp
+      when:
+        - enable_tailscale | bool
+        - enable_immich | bool
+    - name: Enable firewall
+      community.general.ufw:
+        state: enabled

@@ -1,0 +1,83 @@
+---
+- name: Install Tailscale repository key
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/ubuntu/resolute.noarmor.gpg
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: '0644'
+- name: Install Tailscale repository definition
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/ubuntu/resolute.tailscale-keyring.list
+    dest: /etc/apt/sources.list.d/tailscale.list
+    mode: '0644'
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    update_cache: true
+- name: Enable Tailscale daemon
+  ansible.builtin.service:
+    name: tailscaled
+    enabled: true
+    state: started
+- name: Check Tailscale state
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+- name: Authenticate Tailscale without routing features
+  ansible.builtin.command: "tailscale up --auth-key={{ vault_tailscale_authkey }}"
+  when:
+    - vault_tailscale_authkey is defined
+    - vault_tailscale_authkey != 'REPLACE_ME'
+    - >-
+      '"BackendState":"Running"' not in
+      (tailscale_status.stdout | default('') | regex_replace('\\s+', ''))
+  changed_when: true
+  no_log: true
+# --- Tailnet publishing (Tailscale Serve) ------------------------------------
+# Serve terminates TLS with a Let's Encrypt certificate for the node's ts.net
+# name and proxies to a loopback service, so application binds stay on 127.0.0.1
+# and nothing is exposed on the LAN or the public Internet. Ports are separate
+# because Serve cannot host two applications on one root path.
+#
+# Unpublishing is deliberately not automated: use `tailscale serve --https=<port>
+# off` after disabling an application.
+- name: Read the current Tailscale Serve configuration
+  ansible.builtin.command: tailscale serve status --json
+  register: tailscale_serve
+  changed_when: false
+  failed_when: false
+  when: enable_immich | bool or enable_homeassistant | bool
+- name: Index the Tailscale node identity and Serve configuration
+  ansible.builtin.set_fact:
+    tailscale_dns_name: >-
+      {{ ((tailscale_status.stdout | default('{}', true) | from_json).get('Self', {}).get('DNSName', ''))
+         | regex_replace('\.$', '') }}
+    tailscale_serve_web: >-
+      {{ (tailscale_serve.stdout | default('{}', true) | from_json).get('Web', {}) }}
+  when: not ansible_check_mode
+- name: Publish Immich over Tailscale Serve
+  ansible.builtin.command: >-
+    tailscale serve --bg --https={{ immich_serve_port }}
+    http://{{ immich_bind_address }}:{{ immich_port }}
+  vars:
+    serve_key: "{{ tailscale_dns_name }}:{{ immich_serve_port }}"
+    serve_target: "http://{{ immich_bind_address }}:{{ immich_port }}"
+  when:
+    - enable_immich | bool
+    - >-
+      tailscale_serve_web.get(serve_key, {}).get('Handlers', {}).get('/', {}).get('Proxy')
+      | default('', true) != serve_target
+  changed_when: true
+- name: Publish Home Assistant over Tailscale Serve
+  ansible.builtin.command: >-
+    tailscale serve --bg --https={{ homeassistant_serve_port }}
+    http://{{ homeassistant_bind_address }}:{{ homeassistant_port }}
+  vars:
+    serve_key: "{{ tailscale_dns_name }}:{{ homeassistant_serve_port }}"
+    serve_target: "http://{{ homeassistant_bind_address }}:{{ homeassistant_port }}"
+  when:
+    - enable_homeassistant | bool
+    - >-
+      tailscale_serve_web.get(serve_key, {}).get('Handlers', {}).get('/', {}).get('Proxy')
+      | default('', true) != serve_target
+  changed_when: true

@@ -1,0 +1,70 @@
+---
+nas_hostname: nas
+nas_domain: home.arpa
+nas_timezone: Etc/UTC
+nas_locale: en_US.UTF-8
+ansible_admin_user: ansible
+ansible_admin_authorized_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICz2QnSbleJkS1FPGb4yMAHWf+6nTyRPjahJBL5eS0Rw
+ssh_hardening_enabled: false
+ssh_bootstrap_proven: false
+manage_netplan: false
+nas_primary_interface: REPLACE_ME
+
+# Enable only after replacing this documentation CIDR with the real trusted LAN.
+firewall_enabled: false
+nas_lan_cidr: 192.0.2.0/24
+zfs_pool_name: tank
+zfs_mirror_disks:
+  - /dev/disk/by-id/ata-WDC_WD40EFPX-68C6CN0_WD-WX42DA39X9D1
+allow_destructive_storage_init: false
+zfs_storage_confirmation: ""
+nas_users:
+  - { name: iuliansafta, private_dataset: tank/documents/iuliansafta }
+shared_group: nas-shared
+shared_dataset: tank/documents/shared
+samba_passwords:
+  iuliansafta: >-
+    {{ lookup('ansible.builtin.pipe',
+              'op read --account my.1password.com op://Homelab/cbhtqyrpcxzr746r6moahgfkyq/password') }}
+immich_db_password: >-
+  {{ lookup('ansible.builtin.pipe',
+            'op read --account my.1password.com op://Homelab/d6ye62ensok7cg3wlcdk7ibmq4/password') }}
+immich_data_path: /tank/photos/immich
+immich_appdata_path: /srv/appdata/immich
+immich_compose_path: /srv/compose/immich
+# Review Immich release notes and update deliberately.
+immich_version: v3.2.0
+immich_bind_address: 127.0.0.1
+immich_port: 2283
+# Tailscale Serve publishes this at https://<node>.<tailnet>.ts.net (443) and
+# proxies to the loopback bind above.
+immich_serve_port: 443
+immich_enable_dri: false
+enable_immich: true
+# Home Assistant keeps host networking for mDNS discovery but binds its HTTP
+# listener to loopback, so Tailscale Serve is the only way in - the same posture
+# as Immich. Review release notes before upgrading; the recorder database
+# migration is irreversible.
+homeassistant_version: "2026.9.1"
+homeassistant_compose_path: /srv/compose/homeassistant
+homeassistant_config_path: /srv/appdata/homeassistant
+homeassistant_bind_address: 127.0.0.1
+homeassistant_port: 8123
+# Immich already owns port 443 and Home Assistant cannot be served at a subpath,
+# so it gets its own HTTPS port on the same ts.net name.
+homeassistant_serve_port: 8443
+homeassistant_timezone: "{{ nas_timezone }}"
+# Stable /dev/serial/by-id/... paths for Zigbee or Z-Wave radios.
+homeassistant_serial_devices: []
+homeassistant_enable_bluetooth: false
+enable_homeassistant: true
+enable_tailscale: true
+enable_scrutiny: false
+enable_backup: false
+enable_offsite_backup: false
+restic_repository: REPLACE_ME
+backup_mount: /mnt/backup
+# Keep true for local removable-disk repositories to prevent writes to the NVMe
+# when the backup disk is absent. Set false only for a configured remote backend.
+backup_require_mount: true

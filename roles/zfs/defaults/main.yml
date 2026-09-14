@@ -1,0 +1,10 @@
+---
+zfs_dataset_definitions:
+  - { name: photos, recordsize: 1M }
+  - { name: photos/immich, recordsize: 1M }
+  - { name: documents, recordsize: 128K, documents: true }
+  - { name: documents/shared, recordsize: 128K, documents: true }
+  - { name: backups, recordsize: 128K }
+  - { name: backups/immich-db, recordsize: 128K }
+  - { name: backups/app-config, recordsize: 128K }
+  - { name: archive, recordsize: 1M }

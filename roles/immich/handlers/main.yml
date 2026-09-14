@@ -1,0 +1,7 @@
+---
+- name: Deploy immich
+  ansible.builtin.command: docker compose up -d --remove-orphans
+  args:
+    chdir: "{{ immich_compose_path }}"
+  changed_when: true
+  when: not ansible_check_mode

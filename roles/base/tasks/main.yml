@@ -1,0 +1,43 @@
+---
+- name: Verify target operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] is match('^26\.04(\.|$)')
+    fail_msg: This repository targets only the Ubuntu 26.04 LTS series.
+- name: Configure hostname
+  ansible.builtin.hostname:
+    name: "{{ nas_hostname }}"
+- name: Configure timezone
+  community.general.timezone:
+    name: "{{ nas_timezone }}"
+- name: Install base packages
+  ansible.builtin.apt:
+    name: [acl, ca-certificates, curl, gnupg, unattended-upgrades, chrony, zfsutils-linux, smartmontools]
+    update_cache: true
+    cache_valid_time: 3600
+- name: Generate configured locale
+  community.general.locale_gen:
+    name: "{{ nas_locale }}"
+    state: present
+- name: Configure default locale
+  ansible.builtin.copy:
+    dest: /etc/default/locale
+    content: "LANG={{ nas_locale }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+- name: Configure unattended security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: '0644'
+- name: Enable time synchronization
+  ansible.builtin.service:
+    name: chrony
+    enabled: true
+    state: started

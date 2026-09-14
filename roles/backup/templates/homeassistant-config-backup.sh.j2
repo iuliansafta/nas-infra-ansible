@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+umask 077
+
+config={{ homeassistant_config_path }}
+# Skip cleanly when Home Assistant is not deployed; the backup role supports
+# Immich, Home Assistant, or both.
+[ -d "$config" ] || {
+  echo "no Home Assistant config at $config; skipping" >&2
+  exit 0
+}
+
+dest=/{{ zfs_pool_name }}/backups/app-config
+mkdir -p "$dest"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+tmp="$dest/.homeassistant-config-$stamp.tar.gz.tmp"
+# Exclude the recorder database and logs: history is regenerable, and an unclean
+# copy of an open SQLite file can restore corrupt. .storage is kept because it
+# holds authentication and integration state.
+parent=$(dirname "$config")
+base=$(basename "$config")
+tar -czf "$tmp" \
+  --exclude="$base/home-assistant_v2.db*" \
+  --exclude="$base/home-assistant.log*" \
+  -C "$parent" "$base"
+mv "$tmp" "$dest/homeassistant-config-$stamp.tar.gz"
+find "$dest" -type f -name 'homeassistant-config-*.tar.gz' -mtime +365 -delete

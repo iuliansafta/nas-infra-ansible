@@ -1,0 +1,90 @@
+---
+- name: Validate ZFS pool name
+  ansible.builtin.assert:
+    that: zfs_pool_name is match('^[A-Za-z][A-Za-z0-9_.:-]*$')
+    fail_msg: Configure a simple, non-option ZFS pool name.
+- name: Install ZFS tools and disk diagnostics
+  ansible.builtin.apt:
+    name: [zfsutils-linux, smartmontools]
+    state: present
+- name: Check whether pool exists or is importable
+  ansible.builtin.shell: "set -o pipefail; zpool list -H -o name 2>/dev/null; zpool import 2>/dev/null"
+  args: { executable: /bin/bash }
+  register: zfs_pool_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+- name: Import existing pool without creating it
+  ansible.builtin.command: "zpool import -d /dev/disk/by-id {{ zfs_pool_name }}"
+  when:
+    - zfs_pool_name not in (zfs_pool_probe.stdout_lines | default([]))
+    - zfs_pool_name in zfs_pool_probe.stdout
+    - not ansible_check_mode
+  changed_when: true
+- name: Destructive initialization preflight
+  when: allow_destructive_storage_init | bool
+  block:
+    - name: Require one single-disk target or two mirror targets
+      ansible.builtin.assert:
+        that:
+          - zfs_mirror_disks | length in [1, 2]
+          - zfs_mirror_disks | unique | length == zfs_mirror_disks | length
+          - zfs_mirror_disks | select('match', '^/dev/disk/by-id/') | list | length == zfs_mirror_disks | length
+          - zfs_mirror_disks | reject('search', 'REPLACE_') | list | length == zfs_mirror_disks | length
+          - zfs_mirror_disks | select('search', '-part[0-9]+$') | list | length == 0
+          - zfs_pool_name not in zfs_pool_probe.stdout
+    - name: Collect destructive target model serial size and partition facts
+      ansible.builtin.command: "lsblk --bytes --json --output NAME,PATH,VENDOR,MODEL,SERIAL,SIZE,TYPE,FSTYPE,MOUNTPOINTS,PARTTYPENAME {{ item }}"
+      loop: "{{ zfs_mirror_disks }}"
+      register: zfs_storage_preflight
+      changed_when: false
+    - name: Verify destructive targets resolve to whole disks
+      ansible.builtin.command: "lsblk -dno TYPE {{ item }}"
+      loop: "{{ zfs_mirror_disks }}"
+      register: zfs_storage_target_types
+      changed_when: false
+      failed_when: zfs_storage_target_types.stdout | trim != 'disk'
+    - name: Collect destructive target SMART identity and health
+      ansible.builtin.command: "smartctl -i -H {{ item }}"
+      loop: "{{ zfs_mirror_disks }}"
+      register: zfs_storage_smart_preflight
+      changed_when: false
+      failed_when: false
+    - name: Present exact destructive targets
+      ansible.builtin.debug:
+        msg:
+          lsblk: "{{ zfs_storage_preflight.results | map(attribute='stdout') | list }}"
+          smart: "{{ zfs_storage_smart_preflight.results | map(attribute='stdout') | list }}"
+    - name: Require confirmation matching the presented by-id paths
+      ansible.builtin.assert:
+        that: zfs_storage_confirmation == ('ERASE ' ~ (zfs_mirror_disks | join(' ')))
+        fail_msg: Review the facts above, then set confirmation exactly to ERASE followed by both configured paths.
+    - name: Create new pool only after explicit confirmation
+      ansible.builtin.command: >-
+        zpool create -f -o ashift=12 -O compression=lz4 -O atime=off
+        {{ zfs_pool_name }} {{ 'mirror ' if zfs_mirror_disks | length == 2 else '' }}{{ zfs_mirror_disks | join(' ') }}
+      changed_when: true
+- name: Verify pool exists before dataset management
+  ansible.builtin.command: "zpool list -H {{ zfs_pool_name }}"
+  changed_when: false
+  check_mode: false
+- name: Create standard datasets
+  community.general.zfs:
+    name: "{{ zfs_pool_name }}/{{ item.name }}"
+    state: present
+    extra_zfs_properties: >-
+      {{ {'compression': 'lz4', 'atime': 'off', 'recordsize': item.recordsize}
+         | combine((item.documents | default(false))
+         | ternary({'acltype': 'posixacl', 'xattr': 'sa'}, {})) }}
+  loop: "{{ zfs_dataset_definitions }}"
+- name: Create private document datasets
+  community.general.zfs:
+    name: "{{ item.private_dataset }}"
+    state: present
+    extra_zfs_properties:
+      compression: lz4
+      atime: 'off'
+      recordsize: 128K
+      acltype: posixacl
+      xattr: sa
+  loop: "{{ nas_users }}"

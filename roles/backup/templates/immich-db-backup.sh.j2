@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+umask 077
+
+# The backup role supports Immich, Home Assistant, or both; skip cleanly when
+# this application is not deployed so one missing app cannot fail the whole job.
+docker exec immich_postgres pg_dump --version >/dev/null 2>&1 || {
+  echo "immich_postgres is not running; skipping Immich DB backup" >&2
+  exit 0
+}
+
+dest=/{{ zfs_pool_name }}/backups/immich-db
+mkdir -p "$dest"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+tmp="$dest/.immich-$stamp.sql.gz.tmp"
+docker exec immich_postgres pg_dump --clean --if-exists --dbname=immich --username=postgres | gzip > "$tmp"
+mv "$tmp" "$dest/immich-$stamp.sql.gz"
+find "$dest" -type f -name 'immich-*.sql.gz' -mtime +365 -delete
+
+config_dest=/{{ zfs_pool_name }}/backups/app-config
+mkdir -p "$config_dest"
+config_tmp="$config_dest/.immich-compose-$stamp.tar.gz.tmp"
+tar -czf "$config_tmp" -C /srv/compose immich
+mv "$config_tmp" "$config_dest/immich-compose-$stamp.tar.gz"
+find "$config_dest" -type f -name 'immich-compose-*.tar.gz' -mtime +365 -delete

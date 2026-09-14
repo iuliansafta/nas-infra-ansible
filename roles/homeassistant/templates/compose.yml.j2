@@ -1,0 +1,32 @@
+name: homeassistant
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:{{ homeassistant_version }}
+    # Host networking is required for mDNS discovery. The HTTP listener itself is
+    # bound to loopback (see configuration.yaml.j2), so Tailscale Serve is the
+    # only way in - the same posture as Immich.
+    network_mode: host
+    volumes:
+      - {{ homeassistant_config_path }}:/config
+      - /etc/localtime:/etc/localtime:ro
+{% if homeassistant_enable_bluetooth | bool %}
+      - /run/dbus:/run/dbus:ro
+{% endif %}
+{% if homeassistant_serial_devices | length > 0 %}
+    devices:
+{% for device in homeassistant_serial_devices %}
+      - {{ device }}:{{ device }}
+{% endfor %}
+{% endif %}
+    environment:
+      TZ: {{ homeassistant_timezone }}
+    restart: unless-stopped
+    # Graceful stop lets the recorder flush SQLite before the container exits.
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/manifest.json"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 120s

@@ -1,0 +1,12 @@
+---
+- name: Run configured NAS backups
+  hosts: nas
+  become: true
+  roles:
+    - backup
+  tasks:
+    - name: Start backup service now
+      ansible.builtin.systemd_service:
+        name: nas-restic-backup.service
+        state: started
+      when: enable_backup | bool

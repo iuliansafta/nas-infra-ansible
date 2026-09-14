@@ -1,0 +1,13 @@
+---
+- name: Configure NAS platform without secret-dependent applications
+  hosts: nas
+  become: true
+  roles:
+    - base
+    - ssh
+    - zfs
+    - users
+    - docker
+    - { role: tailscale, when: enable_tailscale | bool }
+    - sanoid
+    - smartd

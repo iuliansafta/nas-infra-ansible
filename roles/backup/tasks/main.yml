@@ -1,0 +1,40 @@
+---
+- name: Require configured encrypted restic repository
+  ansible.builtin.assert:
+    that:
+      - (enable_immich | bool) or (enable_homeassistant | bool)
+      - restic_repository != 'REPLACE_ME'
+      - vault_restic_password is defined
+      - vault_restic_password | default('REPLACE_ME') != 'REPLACE_ME'
+- name: Verify removable backup filesystem is mounted
+  ansible.builtin.command: "mountpoint -q {{ backup_mount }}"
+  changed_when: false
+  when: backup_require_mount | bool
+- name: Install restic
+  ansible.builtin.apt:
+    name: restic
+    state: present
+- name: Install protected backup environment
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/nas-backup.env
+    owner: root
+    mode: '0600'
+  no_log: true
+- name: Install backup scripts and units
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: immich-db-backup.sh.j2, dest: /usr/local/sbin/immich-db-backup, mode: '0750' }
+    - { src: homeassistant-config-backup.sh.j2, dest: /usr/local/sbin/homeassistant-config-backup, mode: '0750' }
+    - { src: restic-backup.sh.j2, dest: /usr/local/sbin/nas-restic-backup, mode: '0750' }
+    - { src: backup.service.j2, dest: /etc/systemd/system/nas-restic-backup.service, mode: '0644' }
+    - { src: backup.timer.j2, dest: /etc/systemd/system/nas-restic-backup.timer, mode: '0644' }
+- name: Enable daily backups
+  ansible.builtin.systemd_service:
+    name: nas-restic-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,8 @@
+# Seed file written by Ansible on first deployment only (force: false).
+#
+# The HTTP listener settings (loopback bind, reverse-proxy trust) are NOT set
+# here. Home Assistant stages an `http:` block from YAML as an unconfirmed trial
+# that auto-reverts after five minutes, and a fresh install has no logged-in
+# user to confirm it - so the listener silently falls back to 0.0.0.0. The role
+# writes those settings into .storage/http instead; see http-store.json.j2.
+default_config:

@@ -1,0 +1,6 @@
+---
+- name: Deploy scrutiny
+  ansible.builtin.command: docker compose up -d --remove-orphans
+  args:
+    chdir: /srv/compose/scrutiny
+  changed_when: true

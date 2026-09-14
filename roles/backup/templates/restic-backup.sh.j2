@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+. /etc/nas-backup.env
+/usr/local/sbin/immich-db-backup
+/usr/local/sbin/homeassistant-config-backup
+# Repository initialization is a deliberate one-time operator action. Do not
+# treat authentication or connectivity failures as an uninitialized repository.
+restic snapshots >/dev/null
+restic backup /{{ zfs_pool_name }}/photos /{{ zfs_pool_name }}/documents /{{ zfs_pool_name }}/backups
+restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 12 --prune

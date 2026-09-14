@@ -1,0 +1,19 @@
+.PHONY: bootstrap platform check apply storage storage-init apps backup syntax
+bootstrap:
+	ansible-playbook playbooks/bootstrap.yml
+platform:
+	ansible-playbook playbooks/platform.yml
+check:
+	ansible-playbook playbooks/site.yml --check --diff
+apply:
+	ansible-playbook playbooks/site.yml
+storage:
+	ansible-playbook playbooks/storage.yml
+storage-init:
+	ansible-playbook playbooks/storage.yml -e allow_destructive_storage_init=true
+apps:
+	ansible-playbook playbooks/apps.yml
+backup:
+	ansible-playbook playbooks/backup.yml
+syntax:
+	ansible-playbook playbooks/site.yml --syntax-check

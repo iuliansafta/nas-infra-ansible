@@ -1,0 +1,7 @@
+[Unit]
+Description=NAS database and restic backup
+After=docker.service
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nas-backup.env
+ExecStart=/usr/local/sbin/nas-restic-backup

@@ -1,0 +1,39 @@
+---
+- name: Install Samba
+  ansible.builtin.apt:
+    name: samba
+    state: present
+- name: Configure Samba
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    mode: '0644'
+    validate: testparm -s %s
+  notify: Reload samba
+- name: Require a secure Samba password for every household user
+  ansible.builtin.assert:
+    that:
+      - samba_passwords is defined
+      - item.name in (samba_passwords | default({}))
+      - (samba_passwords | default({})).get(item.name, 'REPLACE_ME') != 'REPLACE_ME'
+      - (samba_passwords | default({})).get(item.name, '') | length >= 16
+  loop: "{{ nas_users }}"
+  no_log: true
+- name: Check configured Samba users
+  ansible.builtin.command: "pdbedit -L -u {{ item.name }}"
+  loop: "{{ nas_users }}"
+  register: samba_user_checks
+  changed_when: false
+  failed_when: false
+- name: Create missing Samba passwords from vault
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf '%s\n%s\n' "$PASS" "$PASS" | smbpasswd -s -a {{ item.item.name | quote }}
+  args:
+    executable: /bin/bash
+  environment:
+    PASS: "{{ samba_passwords[item.item.name] }}"
+  loop: "{{ samba_user_checks.results }}"
+  when: item.rc != 0
+  changed_when: true
+  no_log: true
