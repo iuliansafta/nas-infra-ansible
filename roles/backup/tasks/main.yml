@@ -4,8 +4,8 @@
     that:
       - (enable_immich | bool) or (enable_homeassistant | bool)
       - restic_repository != 'REPLACE_ME'
-      - vault_restic_password is defined
-      - vault_restic_password | default('REPLACE_ME') != 'REPLACE_ME'
+      - restic_password is defined
+      - restic_password | default('REPLACE_ME') != 'REPLACE_ME'
 - name: Verify removable backup filesystem is mounted
   ansible.builtin.command: "mountpoint -q {{ backup_mount }}"
   changed_when: false

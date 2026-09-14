@@ -23,16 +23,11 @@
   register: tailscale_status
   changed_when: false
   failed_when: false
-- name: Authenticate Tailscale without routing features
-  ansible.builtin.command: "tailscale up --auth-key={{ vault_tailscale_authkey }}"
-  when:
-    - vault_tailscale_authkey is defined
-    - vault_tailscale_authkey != 'REPLACE_ME'
-    - >-
-      '"BackendState":"Running"' not in
-      (tailscale_status.stdout | default('') | regex_replace('\\s+', ''))
-  changed_when: true
-  no_log: true
+# Enrollment itself is deliberately not automated. This host authenticates
+# interactively through OAuth, so there is no auth key to hold and no
+# `tailscale up --auth-key` task here: run `sudo tailscale up` once on a fresh
+# host and approve it in the browser. The Serve publishing below needs that to
+# have happened, and fails loudly if it has not.
 # --- Tailnet publishing (Tailscale Serve) ------------------------------------
 # Serve terminates TLS with a Let's Encrypt certificate for the node's ts.net
 # name and proxies to a loopback service, so application binds stay on 127.0.0.1

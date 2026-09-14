@@ -23,13 +23,8 @@ nas_users:
   - { name: iuliansafta, private_dataset: tank/documents/iuliansafta }
 shared_group: nas-shared
 shared_dataset: tank/documents/shared
-samba_passwords:
-  iuliansafta: >-
-    {{ lookup('ansible.builtin.pipe',
-              'op read --account my.1password.com op://Homelab/cbhtqyrpcxzr746r6moahgfkyq/password') }}
-immich_db_password: >-
-  {{ lookup('ansible.builtin.pipe',
-            'op read --account my.1password.com op://Homelab/d6ye62ensok7cg3wlcdk7ibmq4/password') }}
+# samba_passwords, immich_db_password and restic_password live in the vault:
+# inventory/group_vars/all/vault.yml, produced by `make seal`.
 immich_data_path: /tank/photos/immich
 immich_appdata_path: /srv/appdata/immich
 immich_compose_path: /srv/compose/immich

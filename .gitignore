@@ -1,10 +1,10 @@
 *.retry
 .vault-password
 inventory/host_vars/
-inventory/group_vars/all/vault.yml
 .env
 
 # local planning docs (not tracked)
 PLAN.md
 plan_ubuntu_26_04.md
 docs/MIGRATION.md
+plans/

@@ -16,8 +16,7 @@
         that:
           - not (manage_netplan | bool) or nas_primary_interface not in ['', 'REPLACE_ME']
           - not (enable_backup | bool) or restic_repository not in ['', 'REPLACE_ME']
-          - not (enable_backup | bool) or vault_restic_password | default('') not in ['', 'REPLACE_ME']
-          - not (enable_tailscale | bool) or vault_tailscale_authkey | default('') not in ['', 'REPLACE_ME']
+          - not (enable_backup | bool) or restic_password | default('') not in ['', 'REPLACE_ME']
           - not (enable_immich | bool) or immich_db_password | default('') not in ['', 'REPLACE_ME']
         fail_msg: >-
           The inventory still contains placeholder values. Fill them in for every
